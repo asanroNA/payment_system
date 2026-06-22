@@ -1,0 +1,21 @@
+# libs/common — shared infrastructure helpers (CLAUDE.md §5).
+# Outbox write+relay, Kafka wiring, idempotency, correlation context. Populated in Slice 2.
+[project]
+name = "intellipay-common"
+version = "0.1.0"
+description = "Shared infrastructure helpers (outbox, kafka, idempotency) for intelli-pay"
+requires-python = ">=3.14"
+dependencies = [
+    "intellipay-contracts",
+    "sqlalchemy>=2.0.51",
+]
+
+[tool.uv.sources]
+intellipay-contracts = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/intellipay"]

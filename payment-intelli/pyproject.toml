@@ -1,0 +1,57 @@
+# Workspace root for intelli-pay (codename; see CLAUDE.md §1).
+# This root is intentionally a NON-PACKAGED orchestrator: it has no [build-system],
+# so uv treats it as an application that pulls the workspace members into one shared
+# .venv and hosts the repo-wide tooling config (ruff, mypy). The real importable code
+# lives in the workspace members under libs/ and services/.
+[project]
+name = "intelli-pay"
+version = "0.1.0"
+description = "Event-driven card-payment lifecycle platform (codename intelli-pay)"
+readme = "README.md"
+requires-python = ">=3.14"
+# Depend on the members so `uv sync` installs them (editable) into the shared venv.
+dependencies = [
+    "intellipay-contracts",
+    "intellipay-common",
+    "payment-api",
+]
+
+[tool.uv.workspace]
+members = ["libs/*", "services/*"]
+
+[tool.uv.sources]
+intellipay-contracts = { workspace = true }
+intellipay-common = { workspace = true }
+payment-api = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.11",
+    "mypy>=1.13",
+]
+
+# --- Repo-wide tooling -------------------------------------------------------
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+src = ["libs/contracts/src", "libs/common/src", "services/payment-api"]
+
+[tool.ruff.lint]
+# Boring, high-signal rule set. Expand deliberately, not reflexively.
+select = ["E", "F", "W", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+namespace_packages = true
+explicit_package_bases = true
+# Resolve the intellipay namespace from each member's source root + the service app/.
+mypy_path = ["libs/contracts/src", "libs/common/src", "services/payment-api"]
+
+[tool.pytest.ini_options]
+# `integration` marks tests that need real infra (testcontainers); excluded by test-unit.
+markers = [
+    "integration: requires Kafka/Postgres via testcontainers",
+]
