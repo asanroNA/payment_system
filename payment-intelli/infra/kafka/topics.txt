@@ -1,0 +1,7 @@
+# Topic declarations, consumed by `make topics`.  Format:  <name>:<partitions>
+# Replication factor is 1 locally (single broker). Blank lines and #-comments are ignored.
+#
+# Per-aggregate ordering (CLAUDE.md §6) comes from keying messages by payment_id, so the
+# lifecycle topic has multiple partitions; the DLQ is low-volume and single-partition.
+payments.lifecycle.events:3
+payments.lifecycle.events.dlq:1

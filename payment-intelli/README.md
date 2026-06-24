@@ -40,7 +40,8 @@ See [Makefile](Makefile) and CLAUDE.md §7 for the full command interface.
 Built in small, reviewable vertical slices (CLAUDE.md "Working mode").
 
 - [x] Slice 0 — repo skeleton, uv workspace, tooling, Makefile interface
-- [ ] Slice 1 — `libs/contracts`: `EventEnvelope`, `SemanticMeta`, `PaymentInitiated`
-- [ ] Slice 2 — `libs/common`: outbox + polling relay, kafka, idempotency, context
-- [ ] Slice 3 — `infra/docker-compose.yml`: kafka (KRaft), postgres, registry, ui
+- [x] Slice 1 — `libs/contracts`: `EventEnvelope`, `SemanticMeta`, `PaymentInitiated`
+- [x] Slice 2a — `libs/common`: transactional outbox + polling relay
+- [x] Slice 2b — `libs/common`: kafka wiring, idempotency dedupe, correlation context
+- [x] Slice 3 — `infra/docker-compose.yml`: kafka (KRaft), postgres, registry, ui
 - [ ] Slice 4 — `payment-api` end-to-end outbox → kafka → idempotent consumer

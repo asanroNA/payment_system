@@ -1,0 +1,91 @@
+# Local infrastructure for intelli-pay (CLAUDE.md §5, §7).
+#
+# Brought up by `make up` (which waits for healthchecks). Everything here is local-only and
+# 12-factor: config is injected via ${VAR:-default} so the stack runs with zero setup, and
+# real secrets come from the environment (Secrets Manager on AWS later), never committed.
+#
+# NOT here: Debezium. We chose a polling relay for the foundation (it runs inside payment-api
+# in Slice 4), against the same outbox-table contract Debezium would read — so adding Debezium
+# later is an isolated swap, not a rewrite.
+
+services:
+  # --- Kafka, KRaft mode (no Zookeeper) -------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.8.0
+    ports:
+      - "29092:29092" # host-facing listener (tests / `make run` on the host)
+    environment:
+      # Single node playing both roles. Combined broker+controller is fine locally; in
+      # production these split and the quorum has several voters.
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Three listeners: CONTROLLER (raft), PLAINTEXT (in-network, advertised as `kafka`),
+      # EXTERNAL (advertised as localhost so host processes can connect). Getting the
+      # advertised names right is the usual KRaft footgun — in-container clients must use
+      # `kafka:9092`, host clients `localhost:29092`.
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      # Fixed cluster id so the persisted volume keeps formatting stable across restarts.
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      # Single-broker replication: everything is RF=1 locally.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      # `make up --wait` and dependent services gate on this; topic creation needs a live broker.
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # --- PostgreSQL (one instance; schema-per-service locally) ----------------
+  postgres:
+    image: postgres:17
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-intellipay}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-intellipay}
+      POSTGRES_DB: ${POSTGRES_DB:-intellipay}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-intellipay} -d ${POSTGRES_DB:-intellipay}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # --- Schema registry (Apicurio, in-memory) -------------------------------
+  # Present so `make up` matches §7, but NOT yet wired into producers/consumers or kafka-ui:
+  # schema registration is deferred (an ADR decides Apicurio-vs-Confluent at that point).
+  # The image tag may need adjusting when we actually register schemas.
+  schema-registry:
+    image: apicurio/apicurio-registry-mem:2.6.2.Final
+    ports:
+      - "8081:8080"
+
+  # --- Kafka UI -------------------------------------------------------------
+  kafka-ui:
+    image: kafbat/kafka-ui:latest
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+volumes:
+  kafka-data:
+  postgres-data:

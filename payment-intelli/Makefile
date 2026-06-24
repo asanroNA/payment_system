@@ -11,22 +11,29 @@
 .PHONY: help up down reset run migrate topics schema-register schema-check \
         produce consume test test-unit lint
 
+COMPOSE := docker compose -f infra/docker-compose.yml
+
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 # --- Infra (Slice 3) ---------------------------------------------------------
 up: ## Start local infra (kafka, schema-registry, postgres, ui)
-	@echo "not implemented yet (slice 3)"
+	$(COMPOSE) up -d --wait
 
 down: ## Tear down infra, keep volumes
-	@echo "not implemented yet (slice 3)"
+	$(COMPOSE) down
 
 reset: ## Tear down infra and wipe volumes (clean slate)
-	@echo "not implemented yet (slice 3)"
+	$(COMPOSE) down -v
 
-topics: ## Create/declare topics from infra/kafka/
-	@echo "not implemented yet (slice 3)"
+topics: ## Create/declare topics from infra/kafka/topics.txt
+	@while IFS=: read -r name parts || [ -n "$$name" ]; do \
+		case "$$name" in ''|\#*) continue ;; esac; \
+		$(COMPOSE) exec -T kafka kafka-topics \
+			--bootstrap-server localhost:9092 --create --if-not-exists \
+			--topic "$$name" --partitions "$$parts" --replication-factor 1; \
+	done < infra/kafka/topics.txt
 
 # --- Services (Slice 4+) -----------------------------------------------------
 run: ## Run one service locally (usage: make run svc=payment-api)
@@ -53,7 +60,11 @@ consume: ## Tail a topic (usage: make consume t=payments.lifecycle.events)
 lint: ## ruff check + format check + mypy --strict
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy .
+	# Check by package (not a directory walk): with src-layout namespace packages a bare
+	# `mypy .` reads `intellipay` as two module roots and errors "found twice". mypy can't
+	# mix -p with file paths in one call, so tests run as a second invocation (grows per slice).
+	uv run mypy -p intellipay.contracts -p intellipay.common -p app
+	uv run mypy libs/contracts/tests libs/common/tests
 
 test-unit: ## Fast tests, no infra
 	uv run pytest -m "not integration"
